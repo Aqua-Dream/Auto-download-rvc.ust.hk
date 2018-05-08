@@ -1,79 +1,33 @@
-## Update 2017/2/9
-
-All of the softwares are up-to-date. (It indecates that you can use pip or pip3 for Python 3 to install the selenium instead of downloading the package.)
-
-In `downloader.py`:
-
-- Python: **Python 3.6.0** (default, Jan 16 2017, 12:12:55) [GCC 6.3.1 20170109] on linux
-
-- Selenium: 3.0.2
-
-- Phantomjs: 2.1.1-4
-
-For the Windows user, you can still use the `downloader-v2.py`.
+# Auto-download-rvc.ust.hk
 
 ## About this project
 
-This project aim to download the lecture videos @rvc.ust.hk.
+This project is a modification version of [Auto-download-rvc.ust.hk](https://github.com/firiceguo/Auto-download-rvc.ust.hk), which aims at download HKUST recording videos from @rvc.ust.hk.
 
-Of course, you have to provide 
+## Requirements
+- Python 3
+- requests (python lib)
+- Both Linux and Windows platform systems are supported
 
-- your ITSC account name
+## Start
+Open "config.py".
+ - threads: The number of threads while downloading.
+ - save_dir: An **empty** folder which stores the downloaded file. Create if not exists.
+ - url: Please go to the corresponding video player page, and find the url from the source code of the page (Ctrl+U for Chrome). The url is like the form `https://ptz141.ust.hk/rvcprotected/mp4:[VIDEONAME].mp4/playlist.m3u8?UId=[ITSCID]&SessionId=[SESSIONID]`. You may search the pattern "sources" to find it.
 
-- password
+![How to get url](url.png)
 
-- the lecture URL
+After editing config file, please type `python downloader.py` to start. If you are sure that all the files are downloaded but failed to merge, you may type `python download.py merge` to skip the download process. 
+ 
+## Modifications
+- Change the config file type so users don't need to install configparser.
+- Let users provide url instead of login. 
+ - The login method seems to be failed now. 
+ - Users don't need to install PhantomJS or selenium now.
+ - Python3 can be supported in windows version.
+ 
+- Note that both "copy" and "cat" command support multiple combination. We don't need to develop our own method, and there is no error now.
+- Bug fixed: `thrVideolist[i].append(Videolist[x:x+1])` -> `thrVideolist[i].append(Videolist[x])`
 
-- the browser can be ``PhantomJS``(recommended) or ``Firefox``
-
-in the config file.
-
-You can see more details [here](http://firiceguo.xyz/articles/2016-09/downloader-rvc)(Chinese).
-
-## You are welcome to ...
-
-- give me pull requests and become a countributor of this project
-
-- raising issues to me.
-
-## What you could do
-
-There are some options you can configure.
-
-- account: You have to input your ITSC account name here.
-
-- password: You have to input your ITSC account password here.
-
-- url: You have to provide the video url.
-
-- save_dir: The route you want to save the video.
-
-- threads: The number of threads you want to use.
-
-## Required libraries
-
-- [selenium](https://github.com/SeleniumHQ/selenium)
-
-- configparser
-
-- requests
-
-- urllib
-
-## Test OS
-
-Windows 10 64-bit & Linux x86_64
-
-Python ~~2.7.12~~ 3.6.0
-
-selenium ~~2.52.0~~ 3.0.2
-
-PhantomJS 2.1.1-4
-
-## Common Questions
-
-In windows system, Selenium 3.x use the geckodriver, so if you are using the version 3, there will be an error:`WebDriverException:Message:'geckodriver'executable needs to be in Path`, and [here](http://blog.163.com/tracy_ly_8/blog/static/263060033201691931046880/) is the solution.
-
-Firefox 46.0.1 & [PhantomJS](http://phantomjs.org/)
-
-Because there still exist [bugs](https://github.com/SeleniumHQ/selenium/issues/2645) for Firefox 47 and above version, please use [Firefox 46.0.1](https://ftp.mozilla.org/pub/firefox/releases/46.0.1/) and colse the auto update in the `about:config` to avoid the bug.
+## Acknowledgement
+Thanks for firiceguo's job. Please let me know if you don't want me to modify your code.

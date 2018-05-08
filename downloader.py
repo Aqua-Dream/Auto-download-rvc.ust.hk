@@ -1,110 +1,41 @@
 # -*- coding: utf-8 -*-
 
-import configparser
-from selenium import webdriver
+import config
 import time
 import requests
-import urllib
+from urllib.request import urlopen
 import os
-import platform
+import copy
+import sys
 import threading
+import platform
 
 # load config file
-cf = configparser.ConfigParser()
-cf.read("config")
-account = cf.get("ITSC", "account")
-pwd = cf.get("ITSC", "password")
-url = cf.get("lecture", "url")
-save_dir = cf.get("local", "save_dir") + '/'
-threads = cf.getint("local", "threads")
-browser = cf.get("local", "browser")
-
-system = platform.system()
-
-print(browser)
-
-
-def GetRVC():
-    '''log in the rvc.ust.hk and get the PlaylistUrl url'''
-    print('Opening the browser......')
-
-    # config the browser
-    if "Firefox" in browser:
-        sel = webdriver.Firefox()
-    elif "PhantomJS" in browser:
-        sel = webdriver.PhantomJS()
-    else:
-        print('I donnot know the browser!')
-    # open the login in page
-    sel.get(url)
-    time.sleep(5)
-
-    # sign in the username
-    try:
-        # sel.find_element_by_name("UsernameField").send_keys(account)
-        sel.find_element_by_id("username").send_keys(account)
-        print('user success!')
-    except:
-        print('user error!')
-    time.sleep(1)
-    # sign in the pasword
-    try:
-        # sel.find_element_by_name("PasswordField").send_keys(pwd)
-        sel.find_element_by_id("password").send_keys(pwd)
-        print('pw success!')
-    except:
-        print('pw error!')
-    time.sleep(1)
-    # click to login
-    try:
-        # sel.find_element_by_name("EnterButton").click()
-        sel.find_element_by_name("submit").click()
-        print('click success!')
-    except:
-        print('click error!')
-    time.sleep(3)
-
-    # get the play list url
-    source = sel.page_source
-    try:
-        rtsp_idx = source.index('rvcprotected')
-        sour = source[rtsp_idx:]
-        idx = sour.index('http')
-        i = idx
-        while sour[i] is not "'":
-            i += 1
-        PlaylistUrl_0 = sour[idx:i]
-        try:
-            amp_idx = PlaylistUrl_0.index('amp')
-            PlaylistUrl = PlaylistUrl_0[:amp_idx] + PlaylistUrl_0[amp_idx+4:]
-        except:
-            PlaylistUrl = PlaylistUrl_0
-        print('Get playlist url:', PlaylistUrl)
-    except:
-        PlaylistUrl = ''
-        print('Cannot find playlist source!')
-
-    sel.close()
-    return(PlaylistUrl)
+url = config.url
+save_dir = config.save_dir
+if not save_dir.endswith('/'):
+    save_dir += '/'
+threads = config.threads
 
 
 def GetVideoList(PlaylistUrl):
-    r = requests.get(PlaylistUrl).text
+    r = requests.get(PlaylistUrl).text.encode('ascii', 'ignore').decode()
+    prefix = PlaylistUrl[:PlaylistUrl.index('playlist')]
     Chunklist_idx = r.index('chunk')
-    ChunklistUrl = PlaylistUrl[:PlaylistUrl.index('playlist')] + r[Chunklist_idx:]
-    print('Get chunk list url:', ChunklistUrl)
-
-    Chunklist = requests.get(ChunklistUrl).text
+    ChunklistUrl = prefix + r[Chunklist_idx:]
+    print( 'Get chunk list url:', ChunklistUrl)
+    Chunklist = requests.get(ChunklistUrl).text.encode('ascii', 'ignore').decode()
     Videolist = []
     while 'media' in Chunklist:
         idx = Chunklist.index('media')
         i = idx
         while Chunklist[i] is not '#':
             i += 1
-        Videolist.append(PlaylistUrl[:PlaylistUrl.index('playlist')] + Chunklist[idx:i-1])
+        video = prefix + Chunklist[idx:i-1]
+        Videolist.append(video)
         Chunklist = Chunklist[i:]
-    print('Get video list success!')
-    print('There are %d chunks' % (len(Videolist)))
+    print( 'Get video list success!')
+    print( 'There are %d chunks' % (len(Videolist)))
     return(Videolist)
 
 
@@ -112,42 +43,52 @@ def GetVideo(Videolist):
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     VideoName = []
-    # for i in xrange(5):  # just for test
     for i in range(len(Videolist)):
         idx = GetCurrentFileIdx(Videolist[i])
-        if idx == -1:
-            break
-        print('Downloading the video %d...' % (idx))
-        r = urllib.request.urlopen(Videolist[i]).read()
-        filename = save_dir + str(idx) + '.ts'
-        VideoName.append(str(i) + '.ts')
-        with open(filename, 'wb') as f:
-            f.write(r)
+        try:
+            r = urlopen(Videolist[i])
+            if idx==-1:
+                print( Videolist[i]," failed")
+                continue
+            filename = save_dir + str(idx) + '.ts'
+            if os.path.isfile(filename):
+                filesize = os.path.getsize(filename)
+                if filesize==int(r.headers["content-length"]):
+                    print( idx,", it has been downloaded")
+                    continue
+            print( '%d' % (idx),)
+            content = r.read()
+            VideoName.append(str(i) + '.ts')
+            with open(filename, 'wb') as f:
+                f.write(content)
+        except Exception as e:
+            print( Videolist[i],",failed")
+            print( e)
+            
+def Merge_TS(VideoName, dir):
 
-
-def MergeTS(VideoName, dir):
-    num = len(VideoName)
+    templist = copy.copy(VideoName)
+    
+    if len(templist) <= 1:
+        return True
     os.chdir(dir)
-    print('Merging videos ......')
-    if system is 'Windows':
-        for i in range(1, num):
-            cmd = 'copy /b %s+%s %s' % (VideoName[0], VideoName[i], VideoName[0])
-            os.system(cmd)
-            os.remove(VideoName[i])
+    print( 'Merging videos ......')
+    sys = platform.system()
+    if "Windows" in sys:
+        src = '+'.join(VideoName)
+        cmd = 'copy /b %s %s' %(src, "merged.ts")
+    elif "Linux" in sys:
+        src = ' '.join(VideoName)
+        cmd = 'cat %s > %s' %(src, "merged.ts")
     else:
-        for i in range(1, num):
-            try:
-                cmd = 'cat %s >> %s' % (VideoName[i], VideoName[0])
-                os.system(cmd)
-                os.remove(VideoName[i])
-            except:
-                if i == 1:
-                    print('Sorry, it seems that I donnot know how to merge .ts file in your system.')
-                    break
-    os.chdir('../')
-
+        raise ValueError("Unrecognized platform system!")
+    os.system(cmd)
+    for file in VideoName:
+        os.remove(file)
+   
 
 def GetCurrentFileIdx(VideoUrl):
+    idx=-1
     try:
         ts = VideoUrl.split('.')[-2]
     except:
@@ -155,53 +96,50 @@ def GetCurrentFileIdx(VideoUrl):
     try:
         idx = int(ts.split('_')[-1])
     except:
-        idx = -1
         pass
     return(idx)
-
-if __name__ == '__main__':
-    PlaylistUrl = GetRVC()
-    if PlaylistUrl == '':
-        exit(0)
-    Videolist = GetVideoList(PlaylistUrl)
-
-    # assign each threads' workload
-    if threads > len(Videolist):
-        threads = len(Videolist)
-    num = len(Videolist) // threads
-    mod = len(Videolist) % threads
-    thrVideolist = [[]]*threads
-    x = 0
-    for i in range(threads):
-        thrVideolist[i] = Videolist[x:x+num]
-        x += num
-        if i < mod:
-            thrVideolist[i].append(Videolist[x:x+1])
-            x += 1
-    print(thrVideolist)
-
-    # establish threads
-    thr = []
-    for i in range(threads):
-        t = threading.Thread(target=GetVideo, args=(thrVideolist[i],))
-        thr.append(t)
-        t.start()
-
-    # wait every threads to complete tasks
-    for i in range(threads):
-        thr[i].join()
-
+    
+def getsortedlist():
     # sort the VideoName according to the number not the ascii code
     VideoName = os.listdir(save_dir)
     for i in range(len(VideoName)):
         VideoName[i] = int(VideoName[i].split('.')[0])
     VideoName = sorted(VideoName)
     for i in range(len(VideoName)):
-        VideoName[i] = str(VideoName[i])+'.ts'
+        VideoName[i] = str(VideoName[i]) + '.ts'
+    return VideoName
+    
+if __name__ == '__main__':
+    if len(sys.argv)==1: # no argument
+        PlaylistUrl = url
+        Videolist = GetVideoList(PlaylistUrl)
 
-    # merge the videos downloaded into one file
-    MergeTS(VideoName, save_dir)
-    try:
-        os.remove("ghostdriver.log")
-    except:
-        pass
+        # assign each threads' workload
+        if threads > len(Videolist):
+            threads = len(Videolist)
+        num = len(Videolist) // threads
+        mod = len(Videolist) % threads
+        thrVideolist = [[]]*threads
+        x = 0
+        for i in range(threads):
+            thrVideolist[i] = Videolist[x:x+num]
+            x += num
+            if i < mod:
+                thrVideolist[i].append(Videolist[x])
+                x += 1
+        # establish threads
+        thr = []
+        for i in range(threads):
+            t = threading.Thread(target=GetVideo, args=(thrVideolist[i],))
+            thr.append(t)
+            t.start()
+
+        # wait every threads to complete tasks
+        for i in range(threads):
+            thr[i].join()
+        VideoName = getsortedlist()
+        # merge the videos downloaded into one file
+        Merge_TS(VideoName, save_dir)
+    else:
+        VideoName = getsortedlist()
+        Merge_TS(VideoName, save_dir)
